@@ -14,23 +14,17 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 # Paramètres de trading
 TIMEFRAME_ANALYSE = '4h'
-MIN_VOLUME_24H_USDT = 10_000_000
-RISK_REWARD_RATIO = 2.0
-PIVOT_WINDOW = 5
-TOLERANCE_RETEST = 0.015  # 1.5% de tolérance pour considérer qu'on est sur un retest
-
-ALTCOINS = [
-    'AERO/USDT', 'LIT/USDT', 'WLD/USDT', 'ZRO/USDT', 'APT/USDT',
-    'NEAR/USDT', 'INJ/USDT', 'SUI/USDT', 'ARB/USDT', 'OP/USDT',
-    'AVAX/USDT', 'LINK/USDT', 'DOT/USDT', 'MATIC/USDT', 'ATOM/USDT',
-    'FIL/USDT', 'ETC/USDT', 'DOGE/USDT', 'SHIB/USDT', 'TON/USDT'
-]
+MIN_VOLUME_24H_USDT = 10_000_000  # 10 Millions de dollars
+RISK_REWARD_RATIO = 2.0           # Ratio Risque/Récompense (1:2)
+PIVOT_WINDOW = 5                  # Sensibilité des pivots
+TOLERANCE_RETEST = 0.015          # 1.5% de tolérance pour considérer qu'on est sur un retest
 
 # ==========================================
 # FONCTIONS UTILITAIRES
 # ==========================================
 
 def send_telegram_message(message):
+    """Envoie un message sur Telegram."""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("Erreur : Les identifiants Telegram ne sont pas configurés.")
         return
@@ -40,6 +34,49 @@ def send_telegram_message(message):
         requests.post(url, json=payload)
     except Exception as e:
         print(f"Erreur Telegram : {e}")
+
+def get_dynamic_altcoins(exchange, top_n=100):
+    """Récupère les top altcoins par capitalisation via CoinGecko et filtre pour MEXC."""
+    print("Récupération de la liste dynamique des altcoins...")
+    url = "https://api.coingecko.com/api/v3/coins/markets"
+    params = {
+        'vs_currency': 'usd', 'order': 'market_cap_desc',
+        'per_page': top_n, 'page': 1, 'sparkline': 'false'
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        coins = response.json()
+    except Exception as e:
+        print(f"Erreur CoinGecko : {e}")
+        # Fallback si CoinGecko est en panne
+        return ['SOL/USDT', 'XRP/USDT', 'BNB/USDT', 'DOGE/USDT', 'ADA/USDT', 'AVAX/USDT', 'LINK/USDT', 'DOT/USDT', 'NEAR/USDT', 'SUI/USDT']
+
+    try:
+        markets = exchange.load_markets()
+    except Exception as e:
+        print(f"Erreur chargement MEXC : {e}")
+        return []
+
+    altcoins = []
+    # Exclure les stablecoins et wrapped tokens
+    EXCLUDE = {
+        'usdt', 'usdc', 'dai', 'fdusd', 'tusd', 'usde', 'pyusd', 'busd',
+        'wbtc', 'weth', 'steth', 'wsteth', 'reth', 'cbeth', 'wbeth',
+        'meth', 'sfrxeth', 'frxeth', 'wmatic', 'wavax', 'wbnb'
+    }
+    
+    for coin in coins:
+        symbol = coin['symbol'].upper()
+        if symbol.lower() in EXCLUDE:
+            continue
+        pair = f"{symbol}/USDT"
+        if pair in markets and markets[pair].get('active', True):
+            altcoins.append(pair)
+            
+    print(f"✅ {len(altcoins)} paires tradables récupérées dynamiquement.")
+    return altcoins
 
 def fetch_ohlcv(exchange, symbol, timeframe, limit=200):
     try:
@@ -79,23 +116,19 @@ def analyze_channel(df, pivot_data):
     if bullChan:
         slope = (pL1 - pL2) / (pL1b - pL2b) if (pL1b - pL2b) != 0 else 0
         supNow = pL1 + slope * (current_idx - pL1b)
-        resNow = pH1 + slope * (current_idx - pH1b)
-        # Vérifier si on est proche de la cassure (le prix s'approche du bas du canal)
         dist_to_sup = abs(current_close - supNow) / current_close
-        if current_close < supNow: # Cassure baissière
+        if current_close < supNow:
             return {"dir": "SHORT", "type": "CASSÉ", "level": supNow, "status": "PREPARATION"}
-        elif dist_to_sup < 0.02: # À 2% du support
+        elif dist_to_sup < 0.02:
             return {"dir": "SHORT", "type": "SURVEILLANCE", "level": supNow, "status": "SURVEILLANCE"}
             
     elif bearChan:
         slope = (pH1 - pH2) / (pH1b - pH2b) if (pH1b - pH2b) != 0 else 0
         resNow = pH1 + slope * (current_idx - pH1b)
-        supNow = pL1 + slope * (current_idx - pL1b)
-        # Vérifier si on est proche de la cassure (le prix s'approche du haut du canal)
         dist_to_res = abs(current_close - resNow) / current_close
-        if current_close > resNow: # Cassure haussière
+        if current_close > resNow:
             return {"dir": "LONG", "type": "CASSÉ", "level": resNow, "status": "PREPARATION"}
-        elif dist_to_res < 0.02: # À 2% de la résistance
+        elif dist_to_res < 0.02:
             return {"dir": "LONG", "type": "SURVEILLANCE", "level": resNow, "status": "SURVEILLANCE"}
             
     return None
@@ -114,7 +147,6 @@ def calculate_levels(df, signal, pivot_data):
         risk = sl_price - entry_price
         tp1 = entry_price - (risk * RISK_REWARD_RATIO)
         tp2 = entry_price - (risk * RISK_REWARD_RATIO * 2)
-        
     return entry_price, sl_price, tp1, tp2
 
 # ==========================================
@@ -130,11 +162,17 @@ def run_bot():
         send_telegram_message("❌ *Erreur* : Impossible de récupérer les données BTC.")
         return
 
+    # Récupération dynamique de la liste
+    dynamic_alts = get_dynamic_altcoins(exchange, top_n=100)
+    if not dynamic_alts:
+        send_telegram_message("❌ *Erreur* : Impossible de récupérer la liste des altcoins.")
+        return
+
     setups_valides = []
     preparations = []
     surveillances = []
     
-    for symbol in ALTCOINS:
+    for symbol in dynamic_alts:
         df_alt = fetch_ohlcv(exchange, symbol, TIMEFRAME_ANALYSE)
         if df_alt is None: continue
             
@@ -144,6 +182,8 @@ def run_bot():
         except Exception: continue
 
         df = pd.merge(df_alt, df_btc, on='timestamp', suffixes=('_alt', '_btc'))
+        if len(df) < 50: continue # Pas assez de données
+        
         df['RS'] = df['close_alt'] / df['close_btc']
         
         pivot_data = detect_pivots(df, window=PIVOT_WINDOW)
@@ -151,8 +191,6 @@ def run_bot():
         
         if signal:
             if signal['status'] == 'PREPARATION':
-                # On vérifie si le prix est revenu tester la ligne (Retest)
-                # Pour simplifier, on considère que si le prix est à moins de 1.5% de la ligne, c'est un retest
                 dist = abs(df['close_alt'].iloc[-1] - signal['level']) / df['close_alt'].iloc[-1]
                 if dist < TOLERANCE_RETEST:
                     entry, sl, tp1, tp2 = calculate_levels(df, signal, pivot_data)
@@ -165,25 +203,25 @@ def run_bot():
             elif signal['status'] == 'SURVEILLANCE':
                 surveillances.append({'symbol': symbol, 'dir': signal['dir'], 'level': signal['level']})
                 
-        time.sleep(1)
+        time.sleep(0.5) # Pause pour éviter le rate limit
 
     # --- CONSTRUCTION DU RAPPORT TELEGRAM ---
-    report = f"📊 *RAPPORT DE MARCHÉ ({datetime.now().strftime('%H:%M')})*\n\n"
+    report = f"📊 *RAPPORT DE MARCHÉ ({datetime.now().strftime('%H:%M')})*\n"
+    report += f"🔍 _Analyse sur {len(dynamic_alts)} altcoins_\n\n"
     
     if setups_valides:
         report += "🚀 *SETUPS VALIDÉS (Prêts à trader)*\n"
         for s in setups_valides:
             report += f"• *{s['symbol']}* ({s['dir']})\n"
             report += f"  Entrée : {s['entry']:.4f} | SL : {s['sl']:.4f}\n"
-            report += f"  TP1 : {s['tp1']:.4f} | TP2 : {s['tp2']:.4f}\n"
-        report += "\n"
+            report += f"  TP1 : {s['tp1']:.4f} | TP2 : {s['tp2']:.4f}\n\n"
     else:
         report += "🚀 *SETUPS VALIDÉS* : Aucun pour le moment.\n\n"
 
     if preparations:
         report += "⏳ *EN PRÉPARATION (Attente retest)*\n"
         for p in preparations:
-            report += f"• *{p['symbol']}* ({p['dir']}) - Niveau à surveiller : {p['level']:.4f}\n"
+            report += f"• *{p['symbol']}* ({p['dir']}) - Niveau : {p['level']:.4f}\n"
         report += "\n"
         
     if surveillances:
@@ -196,7 +234,7 @@ def run_bot():
         report += "😴 *Marché calme.* Aucun canal intéressant détecté pour le moment."
 
     send_telegram_message(report)
-    print("Rapport envoyé.")
+    print("Rapport envoyé avec succès.")
 
 if __name__ == "__main__":
     run_bot()
