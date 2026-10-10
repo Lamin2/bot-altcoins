@@ -134,7 +134,7 @@ def run_bot():
     # Envoyer un message de confirmation de démarrage
     send_telegram_message(f"🤖 *Bot démarré* - Analyse des altcoins vs BTC en cours...\nHeure : {datetime.now().strftime('%H:%M')}")
     
-    exchange = ccxt.binance()
+    exchange = ccxt.mexc()
     
     df_btc = fetch_ohlcv(exchange, 'BTC/USDT', TIMEFRAME_ANALYSE)
     if df_btc is None:
