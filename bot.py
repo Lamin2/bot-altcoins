@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# CONFIGURATION (Ne jamais mettre les clés ici)
+# CONFIGURATION
 # ==========================================
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
@@ -20,7 +20,7 @@ MAX_SIGNALS_PAR_JOUR = 3
 RISK_REWARD_RATIO = 2.0  # Ratio Risque/Récompense (1:2)
 PIVOT_WINDOW = 5  # Sensibilité des pivots
 
-# Liste des altcoins à scanner (Modifie cette liste selon tes préférences)
+# Liste des altcoins à scanner
 ALTCOINS = [
     'AERO/USDT', 'LIT/USDT', 'WLD/USDT', 'ZRO/USDT', 'APT/USDT',
     'NEAR/USDT', 'INJ/USDT', 'SUI/USDT', 'ARB/USDT', 'OP/USDT',
@@ -80,7 +80,7 @@ def detect_pivots(df, window=5):
     }
 
 def check_wave_theory_module9(df, pivot_data):
-    """Applique la logique du Module 9 (Canaux et Cassures) sur la Force Relative."""
+    """Applique la logique du Module 9 sur la Force Relative."""
     if pivot_data is None:
         return None
         
@@ -130,10 +130,9 @@ def check_wave_theory_module9(df, pivot_data):
 
 def run_bot():
     print(f"Démarrage du bot - {datetime.now()}")
-    
-    # Envoyer un message de confirmation de démarrage
     send_telegram_message(f"🤖 *Bot démarré* - Analyse des altcoins vs BTC en cours...\nHeure : {datetime.now().strftime('%H:%M')}")
     
+    # ⚠️ CHANGEMENT ICI : Utilisation de MEXC à la place de Binance
     exchange = ccxt.mexc()
     
     df_btc = fetch_ohlcv(exchange, 'BTC/USDT', TIMEFRAME_ANALYSE)
@@ -197,7 +196,6 @@ def run_bot():
             
         time.sleep(1)
 
-    # Message de fin d'analyse
     send_telegram_message(f"✅ *Analyse terminée* - {signals_envoyes} signal(s) trouvé(s) aujourd'hui.")
 
 if __name__ == "__main__":
