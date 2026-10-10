@@ -12,19 +12,17 @@ from datetime import datetime
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-# Paramètres de trading
 TIMEFRAME_ANALYSE = '4h'
-MIN_VOLUME_24H_USDT = 10_000_000  # 10 Millions de dollars
-RISK_REWARD_RATIO = 2.0           # Ratio Risque/Récompense (1:2)
-PIVOT_WINDOW = 5                  # Sensibilité des pivots
-TOLERANCE_RETEST = 0.015          # 1.5% de tolérance pour considérer qu'on est sur un retest
+MIN_VOLUME_24H_USDT = 10_000_000
+RISK_REWARD_RATIO = 2.0
+PIVOT_WINDOW = 5
+TOLERANCE_RETEST = 0.015
 
 # ==========================================
 # FONCTIONS UTILITAIRES
 # ==========================================
 
 def send_telegram_message(message):
-    """Envoie un message sur Telegram."""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("Erreur : Les identifiants Telegram ne sont pas configurés.")
         return
@@ -36,22 +34,19 @@ def send_telegram_message(message):
         print(f"Erreur Telegram : {e}")
 
 def get_dynamic_altcoins(exchange, top_n=100):
-    """Récupère les top altcoins par capitalisation via CoinGecko et filtre pour MEXC."""
     print("Récupération de la liste dynamique des altcoins...")
     url = "https://api.coingecko.com/api/v3/coins/markets"
     params = {
         'vs_currency': 'usd', 'order': 'market_cap_desc',
         'per_page': top_n, 'page': 1, 'sparkline': 'false'
     }
-    
     try:
         response = requests.get(url, params=params, timeout=15)
         response.raise_for_status()
         coins = response.json()
     except Exception as e:
         print(f"Erreur CoinGecko : {e}")
-        # Fallback si CoinGecko est en panne
-        return ['SOL/USDT', 'XRP/USDT', 'BNB/USDT', 'DOGE/USDT', 'ADA/USDT', 'AVAX/USDT', 'LINK/USDT', 'DOT/USDT', 'NEAR/USDT', 'SUI/USDT']
+        return ['SOL/USDT', 'XRP/USDT', 'BNB/USDT', 'DOGE/USDT', 'ADA/USDT']
 
     try:
         markets = exchange.load_markets()
@@ -60,13 +55,11 @@ def get_dynamic_altcoins(exchange, top_n=100):
         return []
 
     altcoins = []
-    # Exclure les stablecoins et wrapped tokens
     EXCLUDE = {
         'usdt', 'usdc', 'dai', 'fdusd', 'tusd', 'usde', 'pyusd', 'busd',
         'wbtc', 'weth', 'steth', 'wsteth', 'reth', 'cbeth', 'wbeth',
         'meth', 'sfrxeth', 'frxeth', 'wmatic', 'wavax', 'wbnb'
     }
-    
     for coin in coins:
         symbol = coin['symbol'].upper()
         if symbol.lower() in EXCLUDE:
@@ -74,7 +67,6 @@ def get_dynamic_altcoins(exchange, top_n=100):
         pair = f"{symbol}/USDT"
         if pair in markets and markets[pair].get('active', True):
             altcoins.append(pair)
-            
     print(f"✅ {len(altcoins)} paires tradables récupérées dynamiquement.")
     return altcoins
 
@@ -89,6 +81,7 @@ def fetch_ohlcv(exchange, symbol, timeframe, limit=200):
         return None
 
 def detect_pivots(df, window=5):
+    # Cette fonction attend les colonnes 'high' et 'low' (qui sont renommées avant l'appel)
     df['pivot_high'] = df['high'].rolling(window=window, center=True).max() == df['high']
     df['pivot_low'] = df['low'].rolling(window=window, center=True).min() == df['low']
     highs = df[df['pivot_high']].tail(2)
@@ -134,8 +127,9 @@ def analyze_channel(df, pivot_data):
     return None
 
 def calculate_levels(df, signal, pivot_data):
-    entry_price = df['close_alt'].iloc[-1]
-    atr = df['high_alt'].sub(df['low_alt']).rolling(14).mean().iloc[-1]
+    # Utilisation des colonnes renommées : 'close', 'high', 'low'
+    entry_price = df['close'].iloc[-1]
+    atr = df['high'].sub(df['low']).rolling(14).mean().iloc[-1]
     
     if signal['dir'] == 'LONG':
         sl_price = min(pivot_data['pL1'], signal['level']) - (atr * 0.5)
@@ -162,7 +156,6 @@ def run_bot():
         send_telegram_message("❌ *Erreur* : Impossible de récupérer les données BTC.")
         return
 
-    # Récupération dynamique de la liste
     dynamic_alts = get_dynamic_altcoins(exchange, top_n=100)
     if not dynamic_alts:
         send_telegram_message("❌ *Erreur* : Impossible de récupérer la liste des altcoins.")
@@ -181,29 +174,37 @@ def run_bot():
             if ticker['quoteVolume'] < MIN_VOLUME_24H_USDT: continue
         except Exception: continue
 
+        # Fusion des DataFrames
         df = pd.merge(df_alt, df_btc, on='timestamp', suffixes=('_alt', '_btc'))
-        if len(df) < 50: continue # Pas assez de données
+        if len(df) < 50: continue
         
-        df['RS'] = df['close_alt'] / df['close_btc']
+        # ⚠️ CORRECTION ICI : On renomme les colonnes pour enlever les suffixes _alt
+        df.rename(columns={
+            'open_alt': 'open', 'high_alt': 'high', 'low_alt': 'low', 
+            'close_alt': 'close', 'volume_alt': 'volume'
+        }, inplace=True)
+        
+        # Maintenant on peut calculer la Force Relative
+        df['RS'] = df['close'] / df['close_btc']
         
         pivot_data = detect_pivots(df, window=PIVOT_WINDOW)
         signal = analyze_channel(df, pivot_data)
         
         if signal:
             if signal['status'] == 'PREPARATION':
-                dist = abs(df['close_alt'].iloc[-1] - signal['level']) / df['close_alt'].iloc[-1]
+                dist = abs(df['close'].iloc[-1] - signal['level']) / df['close'].iloc[-1]
                 if dist < TOLERANCE_RETEST:
                     entry, sl, tp1, tp2 = calculate_levels(df, signal, pivot_data)
                     setups_valides.append({
                         'symbol': symbol, 'dir': signal['dir'], 'entry': entry, 
-                        'sl': sl, 'tp1': tp1, 'tp2': tp2, 'level': signal['level']
+                        'sl': sl, 'tp1': tp1, 'tp2': tp2
                     })
                 else:
                     preparations.append({'symbol': symbol, 'dir': signal['dir'], 'level': signal['level']})
             elif signal['status'] == 'SURVEILLANCE':
                 surveillances.append({'symbol': symbol, 'dir': signal['dir'], 'level': signal['level']})
                 
-        time.sleep(0.5) # Pause pour éviter le rate limit
+        time.sleep(0.5)
 
     # --- CONSTRUCTION DU RAPPORT TELEGRAM ---
     report = f"📊 *RAPPORT DE MARCHÉ ({datetime.now().strftime('%H:%M')})*\n"
