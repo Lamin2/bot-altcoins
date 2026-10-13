@@ -1,0 +1,21 @@
+name: Bot Intraday
+
+on:
+  schedule:
+    - cron: '30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Exécuter le bot
+        env:
+          TELEGRAM_BOT_TOKEN_INTRADAY: ${{ secrets.TELEGRAM_BOT_TOKEN_INTRADAY }}
+          TELEGRAM_CHAT_ID_INTRADAY: ${{ secrets.TELEGRAM_CHAT_ID_INTRADAY }}
+        run: python bot_intraday.py
