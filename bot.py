@@ -46,7 +46,8 @@ def get_dynamic_altcoins(exchange, top_n=100):
         coins = response.json()
     except Exception as e:
         print(f"Erreur CoinGecko : {e}")
-        return ['SOL/USDT', 'XRP/USDT', 'BNB/USDT', 'DOGE/USDT', 'ADA/USDT']
+        # Fallback : inclut BTC dans la liste par défaut
+        return ['BTC/USDT', 'SOL/USDT', 'XRP/USDT', 'BNB/USDT', 'DOGE/USDT', 'ADA/USDT']
 
     try:
         markets = exchange.load_markets()
@@ -55,8 +56,10 @@ def get_dynamic_altcoins(exchange, top_n=100):
         return []
 
     altcoins = []
+    # ⚠️ BTC n'est PAS exclu, on le garde pour l'analyser
     EXCLUDE = {
         'usdt', 'usdc', 'dai', 'fdusd', 'tusd', 'usde', 'pyusd', 'busd',
+        'usd1', 'usdd', 'frax', 'lusd', 'gho', 'crvusd',
         'wbtc', 'weth', 'steth', 'wsteth', 'reth', 'cbeth', 'wbeth',
         'meth', 'sfrxeth', 'frxeth', 'wmatic', 'wavax', 'wbnb'
     }
@@ -81,7 +84,6 @@ def fetch_ohlcv(exchange, symbol, timeframe, limit=200):
         return None
 
 def detect_pivots(df, window=5):
-    # Cette fonction attend les colonnes 'high' et 'low' (qui sont renommées avant l'appel)
     df['pivot_high'] = df['high'].rolling(window=window, center=True).max() == df['high']
     df['pivot_low'] = df['low'].rolling(window=window, center=True).min() == df['low']
     highs = df[df['pivot_high']].tail(2)
@@ -127,7 +129,6 @@ def analyze_channel(df, pivot_data):
     return None
 
 def calculate_levels(df, signal, pivot_data):
-    # Utilisation des colonnes renommées : 'close', 'high', 'low'
     entry_price = df['close'].iloc[-1]
     atr = df['high'].sub(df['low']).rolling(14).mean().iloc[-1]
     
@@ -178,14 +179,17 @@ def run_bot():
         df = pd.merge(df_alt, df_btc, on='timestamp', suffixes=('_alt', '_btc'))
         if len(df) < 50: continue
         
-        # ⚠️ CORRECTION ICI : On renomme les colonnes pour enlever les suffixes _alt
+        # Renommage des colonnes pour enlever les suffixes _alt
         df.rename(columns={
             'open_alt': 'open', 'high_alt': 'high', 'low_alt': 'low', 
             'close_alt': 'close', 'volume_alt': 'volume'
         }, inplace=True)
         
-        # Maintenant on peut calculer la Force Relative
-        df['RS'] = df['close'] / df['close_btc']
+        # ⚠️ CORRECTION BTC : cas particulier
+        if symbol == 'BTC/USDT':
+            df['RS'] = df['close']  # BTC analysé sur son prix réel
+        else:
+            df['RS'] = df['close'] / df['close_btc']  # Altcoins : Force Relative vs BTC
         
         pivot_data = detect_pivots(df, window=PIVOT_WINDOW)
         signal = analyze_channel(df, pivot_data)
@@ -207,7 +211,7 @@ def run_bot():
         time.sleep(0.5)
 
     # --- CONSTRUCTION DU RAPPORT TELEGRAM ---
-    report = f"📊 *RAPPORT DE MARCHÉ ({datetime.now().strftime('%H:%M')})*\n"
+    report = f"📊 *RAPPORT SWING (4H) ({datetime.now().strftime('%H:%M')})*\n"
     report += f"🔍 _Analyse sur {len(dynamic_alts)} altcoins_\n\n"
     
     if setups_valides:
