@@ -7,9 +7,8 @@ import numpy as np
 from datetime import datetime, timezone
 
 # ==========================================
-# CONFIGURATION - BOT INTRADAY (1H) - NOUVEAU BOT
+# CONFIGURATION - BOT INTRADAY (1H) AVEC SESSIONS
 # ==========================================
-# ⚠️ NOMS DIFFÉRENTS DES SECRETS (pour séparer du Swing)
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN_INTRADAY')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID_INTRADAY')
 
@@ -78,15 +77,17 @@ def get_dynamic_altcoins(exchange, top_n=80):
         coins = response.json()
     except Exception as e:
         print(f"Erreur CoinGecko : {e}")
-        return ['SOL/USDT', 'XRP/USDT', 'BNB/USDT', 'DOGE/USDT', 'ADA/USDT']
+        return ['BTC/USDT', 'SOL/USDT', 'XRP/USDT', 'BNB/USDT', 'DOGE/USDT', 'ADA/USDT']
     try:
         markets = exchange.load_markets()
     except Exception:
         return []
     altcoins = []
-    EXCLUDE = {'usdt','usdc','dai','fdusd','tusd','usde','pyusd','busd','wbtc','weth',
-               'steth','wsteth','reth','cbeth','wbeth','meth','sfrxeth','frxeth','wmatic',
-               'wavax','wbnb'}
+    # Exclut les stablecoins et wrapped tokens (mais GARDE BTC)
+    EXCLUDE = {'usdt','usdc','dai','fdusd','tusd','usde','pyusd','busd',
+               'usd1','usdd','frax','lusd','gho','crvusd',
+               'wbtc','weth','steth','wsteth','reth','cbeth','wbeth',
+               'meth','sfrxeth','frxeth','wmatic','wavax','wbnb'}
     for coin in coins:
         symbol = coin['symbol'].upper()
         if symbol.lower() in EXCLUDE: continue
@@ -201,7 +202,12 @@ def run_bot():
         if len(df) < 50: continue
         df.rename(columns={'open_alt':'open','high_alt':'high','low_alt':'low',
                            'close_alt':'close','volume_alt':'volume'}, inplace=True)
-        df['RS'] = df['close'] / df['close_btc']
+        
+        # ⚠️ CORRECTION BTC : cas particulier
+        if symbol == 'BTC/USDT':
+            df['RS'] = df['close']  # BTC analysé sur son prix réel
+        else:
+            df['RS'] = df['close'] / df['close_btc']  # Altcoins : Force Relative vs BTC
         
         pivot_data = detect_pivots(df, window=session['pivot'])
         signal = analyze_channel(df, pivot_data)
@@ -219,6 +225,7 @@ def run_bot():
                 surveillances.append({'symbol': symbol, 'dir': signal['dir'], 'level': signal['level']})
         time.sleep(0.5)
     
+    # --- RAPPORT ---
     report = f"⚡ *RAPPORT INTRADAY (1H) - {session['emoji']} {session['name']}*\n"
     report += f"🕐 {datetime.now().strftime('%H:%M')} | 🔍 _{len(dynamic_alts)} altcoins_\n\n"
     
