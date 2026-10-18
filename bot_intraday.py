@@ -19,35 +19,25 @@ TIMEFRAME_ANALYSE = '1h'
 # ==========================================
 
 def get_current_session():
-    """Détecte la session en fonction de l'heure UTC."""
     now_utc = datetime.now(timezone.utc)
     total_min = now_utc.hour * 60 + now_utc.minute
     
-    # Asiatique : 00h00 - 08h30 UTC (01h00 - 09h30 Cameroun)
     if total_min < 8*60 + 30:
         return {"name": "ASIATIQUE", "emoji": "🌏", "pivot": 5, "tol": 0.008,
                 "vol": 10_000_000, "rr": 2.5, "max": 2,
                 "desc": "Volume faible. On ne prend que les setups parfaits."}
-    
-    # Londres : 08h30 - 13h30 UTC (09h30 - 14h30 Cameroun)
     elif total_min < 13*60 + 30:
         return {"name": "LONDRES", "emoji": "🇬🇧", "pivot": 4, "tol": 0.012,
                 "vol": 5_000_000, "rr": 2.0, "max": 4,
                 "desc": "Volume moyen. Les tendances se dessinent."}
-    
-    # Overlap Londres/US : 13h30 - 16h30 UTC (14h30 - 17h30 Cameroun)
     elif total_min < 16*60 + 30:
         return {"name": "OVERLAP LONDRES/US", "emoji": "🔥", "pivot": 3, "tol": 0.015,
                 "vol": 5_000_000, "rr": 2.0, "max": 5,
                 "desc": "Meilleure liquidité de la journée. Les meilleurs mouvements se dessinent."}
-    
-    # US : 16h30 - 21h00 UTC (17h30 - 22h00 Cameroun)
     elif total_min < 21*60:
         return {"name": "US", "emoji": "🇺🇸", "pivot": 3, "tol": 0.015,
                 "vol": 5_000_000, "rr": 2.5, "max": 5,
                 "desc": "Forte volatilité. Mouvements explosifs. TP plus ambitieux."}
-    
-    # Nuit : 21h00 - 00h00 UTC (22h00 - 01h00 Cameroun)
     else:
         return {"name": "NUIT", "emoji": "🌙", "pivot": 5, "tol": 0.005,
                 "vol": 20_000_000, "rr": 3.0, "max": 1,
@@ -83,7 +73,6 @@ def get_dynamic_altcoins(exchange, top_n=80):
     except Exception:
         return []
     altcoins = []
-    # Exclut les stablecoins et wrapped tokens (mais GARDE BTC)
     EXCLUDE = {'usdt','usdc','dai','fdusd','tusd','usde','pyusd','busd',
                'usd1','usdd','frax','lusd','gho','crvusd',
                'wbtc','weth','steth','wsteth','reth','cbeth','wbeth',
@@ -108,15 +97,16 @@ def fetch_ohlcv(exchange, symbol, timeframe, limit=200):
         return None
 
 def detect_pivots(df, window=5):
-    df['pivot_high'] = df['high'].rolling(window=window, center=True).max() == df['high']
-    df['pivot_low'] = df['low'].rolling(window=window, center=True).min() == df['low']
+    # ⚠️ CORRECTION : on calcule les pivots sur RS
+    df['pivot_high'] = df['RS'].rolling(window=window, center=True).max() == df['RS']
+    df['pivot_low'] = df['RS'].rolling(window=window, center=True).min() == df['RS']
     highs = df[df['pivot_high']].tail(2)
     lows = df[df['pivot_low']].tail(2)
     if len(highs) < 2 or len(lows) < 2: return None
     return {
-        'pH1': highs['high'].iloc[-1], 'pH2': highs['high'].iloc[-2],
+        'pH1': highs['RS'].iloc[-1], 'pH2': highs['RS'].iloc[-2],
         'pH1b': df.index.get_loc(highs.index[-1]), 'pH2b': df.index.get_loc(highs.index[-2]),
-        'pL1': lows['low'].iloc[-1], 'pL2': lows['low'].iloc[-2],
+        'pL1': lows['RS'].iloc[-1], 'pL2': lows['RS'].iloc[-2],
         'pL1b': df.index.get_loc(lows.index[-1]), 'pL2b': df.index.get_loc(lows.index[-2])
     }
 
@@ -149,13 +139,22 @@ def analyze_channel(df, pivot_data):
 def calculate_levels(df, signal, pivot_data, rr_ratio):
     entry_price = df['close'].iloc[-1]
     atr = df['high'].sub(df['low']).rolling(14).mean().iloc[-1]
+    
+    # ⚠️ CORRECTION : Conversion du niveau RS en prix réel
+    is_btc = 'close_btc' not in df.columns or df['close_btc'].iloc[-1] == df['close'].iloc[-1]
+    btc_price = df['close_btc'].iloc[-1] if not is_btc else 1
+    
+    level_price = signal['level'] * btc_price if not is_btc else signal['level']
+    pL1_price = pivot_data['pL1'] * btc_price if not is_btc else pivot_data['pL1']
+    pH1_price = pivot_data['pH1'] * btc_price if not is_btc else pivot_data['pH1']
+    
     if signal['dir'] == 'LONG':
-        sl_price = min(pivot_data['pL1'], signal['level']) - (atr * 0.5)
+        sl_price = min(pL1_price, level_price) - (atr * 0.5)
         risk = entry_price - sl_price
         tp1 = entry_price + (risk * rr_ratio)
         tp2 = entry_price + (risk * rr_ratio * 2)
     else:
-        sl_price = max(pivot_data['pH1'], signal['level']) + (atr * 0.5)
+        sl_price = max(pH1_price, level_price) + (atr * 0.5)
         risk = sl_price - entry_price
         tp1 = entry_price - (risk * rr_ratio)
         tp2 = entry_price - (risk * rr_ratio * 2)
@@ -203,29 +202,33 @@ def run_bot():
         df.rename(columns={'open_alt':'open','high_alt':'high','low_alt':'low',
                            'close_alt':'close','volume_alt':'volume'}, inplace=True)
         
-        # ⚠️ CORRECTION BTC : cas particulier
         if symbol == 'BTC/USDT':
-            df['RS'] = df['close']  # BTC analysé sur son prix réel
+            df['RS'] = df['close']
         else:
-            df['RS'] = df['close'] / df['close_btc']  # Altcoins : Force Relative vs BTC
+            df['RS'] = df['close'] / df['close_btc']
         
         pivot_data = detect_pivots(df, window=session['pivot'])
         signal = analyze_channel(df, pivot_data)
         
         if signal:
             if signal['status'] == 'PREPARATION':
-                dist = abs(df['close'].iloc[-1] - signal['level']) / df['close'].iloc[-1]
+                # ⚠️ CORRECTION : comparer RS avec RS
+                dist = abs(df['RS'].iloc[-1] - signal['level']) / df['RS'].iloc[-1]
                 if dist < session['tol']:
                     entry, sl, tp1, tp2 = calculate_levels(df, signal, pivot_data, session['rr'])
                     setups_valides.append({'symbol': symbol, 'dir': signal['dir'],
                                            'entry': entry, 'sl': sl, 'tp1': tp1, 'tp2': tp2})
                 else:
-                    preparations.append({'symbol': symbol, 'dir': signal['dir'], 'level': signal['level']})
+                    # ⚠️ CORRECTION : afficher le prix converti
+                    is_btc = symbol == 'BTC/USDT'
+                    price_level = signal['level'] if is_btc else signal['level'] * df['close_btc'].iloc[-1]
+                    preparations.append({'symbol': symbol, 'dir': signal['dir'], 'level': price_level})
             elif signal['status'] == 'SURVEILLANCE':
-                surveillances.append({'symbol': symbol, 'dir': signal['dir'], 'level': signal['level']})
+                is_btc = symbol == 'BTC/USDT'
+                price_level = signal['level'] if is_btc else signal['level'] * df['close_btc'].iloc[-1]
+                surveillances.append({'symbol': symbol, 'dir': signal['dir'], 'level': price_level})
         time.sleep(0.5)
     
-    # --- RAPPORT ---
     report = f"⚡ *RAPPORT INTRADAY (1H) - {session['emoji']} {session['name']}*\n"
     report += f"🕐 {datetime.now().strftime('%H:%M')} | 🔍 _{len(dynamic_alts)} altcoins_\n\n"
     
