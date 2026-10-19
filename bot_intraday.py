@@ -141,7 +141,8 @@ def calculate_levels(df, signal, pivot_data, rr_ratio):
     atr = df['high'].sub(df['low']).rolling(14).mean().iloc[-1]
     
     # ⚠️ CORRECTION : Conversion du niveau RS en prix réel
-    is_btc = 'close_btc' not in df.columns or df['close_btc'].iloc[-1] == df['close'].iloc[-1]
+    # BTC : RS = prix (egal a close). Alts : RS = ratio. Test robuste, independant des 2 telechargements de BTC.
+    is_btc = df['RS'].iloc[-1] == df['close'].iloc[-1]
     btc_price = df['close_btc'].iloc[-1] if not is_btc else 1
     
     level_price = signal['level'] * btc_price if not is_btc else signal['level']
