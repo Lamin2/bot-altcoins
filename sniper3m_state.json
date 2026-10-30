@@ -1,0 +1,39 @@
+{
+ "BTC/USDT": {
+  "pos": null,
+  "last_entry_ts": 1793346120000,
+  "rule": {
+   "key": null,
+   "consec": 0,
+   "stopped": false
+  }
+ },
+ "ETH/USDT": {
+  "pos": null,
+  "last_entry_ts": 1793280600000,
+  "rule": {
+   "key": null,
+   "consec": 0,
+   "stopped": false
+  }
+ },
+ "BNB/USDT": {
+  "pos": null,
+  "last_entry_ts": 1793280960000,
+  "rule": {
+   "key": null,
+   "consec": 0,
+   "stopped": false
+  }
+ },
+ "SOL/USDT": {
+  "pos": null,
+  "last_entry_ts": 1793350980000,
+  "rule": {
+   "key": null,
+   "consec": 0,
+   "stopped": false
+  }
+ },
+ "last_hb": "2026-10-30"
+}
