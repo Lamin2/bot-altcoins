@@ -443,4 +443,26 @@ def run_bot():
         report += "\n"
 
     if surveillances:
-        report += "👀 *SOUS SURVEILLA
+        
+         report += "👀 *SOUS SURVEILLANCE*\n"
+        for s in surveillances[:5]:
+            report += f"• *{s['symbol']}* ({s['dir']}) - Ligne : {s['level']:.4f}\n"
+
+    # >>> nouveau : transparence sur les blocages
+    if bloques:
+        report += "\n🚫 *BLOQUÉS (ne pas trader)*\n"
+        for b in bloques:
+            report += f"• *{b['symbol']}* ({b['dir']}) - {b['why']}\n"
+
+    if h24_alerts:
+        report += "\n⏰ *TIME STOP H24 — FERMER AU MARCHÉ si encore en position*\n"
+        for sym, st, age_h in h24_alerts:
+            report += f"• *{sym}* ({st['dir']}) — ouvert {age_h:.0f}h, ni TP2 ni SL touchés\n"
+
+    send_telegram_message(report)
+    print("Rapport envoyé.")
+    _save_state(state)
+
+
+if __name__ == "__main__":
+    run_bot()
