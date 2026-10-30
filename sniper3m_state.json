@@ -19,7 +19,7 @@
  },
  "BNB/USDT": {
   "pos": null,
-  "last_entry_ts": 1793280960000,
+  "last_entry_ts": 1793366640000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -28,7 +28,7 @@
  },
  "SOL/USDT": {
   "pos": null,
-  "last_entry_ts": 1793350980000,
+  "last_entry_ts": 1793365920000,
   "rule": {
    "key": null,
    "consec": 0,
