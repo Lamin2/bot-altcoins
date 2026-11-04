@@ -10,7 +10,7 @@
  },
  "ETH/USDT": {
   "pos": null,
-  "last_entry_ts": 1793632860000,
+  "last_entry_ts": 1793802600000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -35,5 +35,5 @@
    "stopped": false
   }
  },
- "last_hb": "2026-11-03"
+ "last_hb": "2026-11-04"
 }
