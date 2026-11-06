@@ -1,7 +1,7 @@
 {
  "BTC/USDT": {
   "pos": null,
-  "last_entry_ts": 1793866500000,
+  "last_entry_ts": 1793952900000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -19,7 +19,7 @@
  },
  "BNB/USDT": {
   "pos": null,
-  "last_entry_ts": 1793611440000,
+  "last_entry_ts": 1793973600000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -35,5 +35,5 @@
    "stopped": false
   }
  },
- "last_hb": "2026-11-05"
+ "last_hb": "2026-11-06"
 }
