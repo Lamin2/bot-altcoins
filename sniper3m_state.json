@@ -9,8 +9,20 @@
   }
  },
  "ETH/USDT": {
-  "pos": null,
-  "last_entry_ts": 1793867040000,
+  "pos": {
+   "ts": 1794058560000,
+   "dir": "SHORT",
+   "entry": 2243.16,
+   "sl": 2245.243106,
+   "tp1": 2232.744469,
+   "tp2": 2222.328939,
+   "session": "NEW YORK",
+   "day": 20764,
+   "rr": 5.0,
+   "checked_ts": 1794058560000,
+   "tp1_hit": false
+  },
+  "last_entry_ts": 1794058560000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -35,5 +47,5 @@
    "stopped": false
   }
  },
- "last_hb": "2026-11-06"
+ "last_hb": "2026-11-07"
 }
