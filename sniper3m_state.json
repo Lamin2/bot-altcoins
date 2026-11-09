@@ -10,7 +10,7 @@
  },
  "ETH/USDT": {
   "pos": null,
-  "last_entry_ts": 1794066120000,
+  "last_entry_ts": 1794213000000,
   "rule": {
    "key": "20764_NEW YORK",
    "consec": 1,
@@ -28,12 +28,12 @@
  },
  "SOL/USDT": {
   "pos": null,
-  "last_entry_ts": 1793862000000,
+  "last_entry_ts": 1794231720000,
   "rule": {
    "key": null,
    "consec": 0,
    "stopped": false
   }
  },
- "last_hb": "2026-11-08"
+ "last_hb": "2026-11-09"
 }
