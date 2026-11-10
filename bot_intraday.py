@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import time
 import requests
 import ccxt
@@ -235,12 +236,13 @@ def analyze_channel(df, pivot_data):
     return None
 
 
-def calculate_levels(df, signal, pivot_data, rr_ratio):
+def calculate_levels(df, signal, pivot_data, rr_ratio, symbol):
     entry_price = df['close'].iloc[-1]
     atr = df['high'].sub(df['low']).rolling(14).mean().iloc[-1]
 
     # Conversion du niveau RS en prix réel
-    is_btc = 'close_btc' not in df.columns or df['close_btc'].iloc[-1] == df['close'].iloc[-1]
+    # Le symbole, jamais une égalité de deux prix susceptibles de bouger.
+    is_btc = symbol == 'BTC/USDT'
     btc_price = df['close_btc'].iloc[-1] if not is_btc else 1
 
     level_price = signal['level'] * btc_price if not is_btc else signal['level']
@@ -259,6 +261,35 @@ def calculate_levels(df, signal, pivot_data, rr_ratio):
         tp2 = entry_price - (risk * rr_ratio * 2)
 
     return entry_price, sl_price, tp1, tp2
+
+
+# Contrôle de sécurité, pas une évaluation de la qualité du setup.
+# Les stops >20% sont bloqués même s'ils pourraient parfois être légitimes.
+MAX_STOP_FRACTION = 0.20
+
+def _valid_prices(direction, entry, sl, tp1, tp2):
+    try:
+        entry, sl, tp1, tp2 = [float(x) for x in (entry, sl, tp1, tp2)]
+        if not all(math.isfinite(x) and x > 0 for x in (entry, sl, tp1, tp2)):
+            return False
+        if direction == 'LONG':
+            ordered = sl < entry < tp1 <= tp2
+        elif direction == 'SHORT':
+            ordered = tp2 <= tp1 < entry < sl
+        else:
+            return False
+        return ordered and 0 < abs(entry - sl) / entry <= MAX_STOP_FRACTION
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+def _valid_saved_state(st):
+    try:
+        # Les vieux états ne conservent que TP2 ; le même TP est utilisé deux fois.
+        if not isinstance(st, dict) or not math.isfinite(float(st['ts_open'])) or float(st['ts_open']) <= 0:
+            return False
+        return _valid_prices(st['dir'], st['entry'], st['sl'], st['tp2'], st['tp2'])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
 
 
 # ==========================================
@@ -322,9 +353,13 @@ def run_bot():
     # >>> EDGE ULTIME (code) : suivi des setups pour le time stop H24
     state = _load_state()
     h24_alerts = []
+    # Conserver les états invalides sans leur attribuer SL/TP ni les supprimer.
+    invalid_states = [sym for sym, st in state.items() if not _valid_saved_state(st)]
     if TIME_STOP_HOURS > 0 and state:
         now_ms = int(time.time() * 1000)
         for sym, st in list(state.items()):
+            if sym in invalid_states:
+                continue
             res = _check_resolved(exchange, sym, st)
             age_h = (now_ms - st["ts_open"]) / 3.6e6
             if res in ("SL", "TP2"):
@@ -376,7 +411,10 @@ def run_bot():
     surveillances = []
     bloques = []  # >>> nouveau : setups rejetés par régime / SHORT_ONLY
 
+    rejected = []
     for symbol in dynamic_alts:
+        if symbol in invalid_states:
+            continue  # état à examiner avant tout nouveau suivi sur ce symbole
         df_alt = fetch_ohlcv(exchange, symbol, TIMEFRAME_ANALYSE)
         if df_alt is None: continue
         try:
@@ -415,68 +453,14 @@ def run_bot():
                             time.sleep(0.5)
                             continue
 
-                    entry, sl, tp1, tp2 = calculate_levels(df, signal, pivot_data, rr_eff)
-                    setups_valides.append({'symbol': symbol, 'dir': signal['dir'],
-                                           'entry': entry, 'sl': sl, 'tp1': tp1, 'tp2': tp2})
-                    # >>> EDGE ULTIME (code) : suivi H24 (pas de reset si déjà suivi)
-                    if TIME_STOP_HOURS > 0 and symbol not in state:
-                        state[symbol] = {'dir': signal['dir'], 'entry': entry, 'sl': sl,
-                                         'tp2': tp2, 'ts_open': int(time.time() * 1000)}
-                else:
-                    is_btc = symbol == 'BTC/USDT'
-                    price_level = signal['level'] if is_btc else signal['level'] * df['close_btc'].iloc[-1]
-                    preparations.append({'symbol': symbol, 'dir': signal['dir'], 'level': price_level})
-            elif signal['status'] == 'SURVEILLANCE':
-                is_btc = symbol == 'BTC/USDT'
-                price_level = signal['level'] if is_btc else signal['level'] * df['close_btc'].iloc[-1]
-                surveillances.append({'symbol': symbol, 'dir': signal['dir'], 'level': price_level})
-        time.sleep(0.5)
-
-    report = f"⚡ *RAPPORT INTRADAY (1H) - {session['emoji']} {session['name']}*\n"
-    report += f"🕐 {datetime.now().strftime('%H:%M')} | 🔍 _{len(dynamic_alts)} altcoins_\n"
-    # >>> AMÉLIORATION 3 (code) : rappel de gestion dans chaque rapport
-    report += "🎯 _Gérer à TP2 (pas de partiel à TP1) ou SL→entrée après TP1_\n"
-    report += "🛑 _2 pertes consécutives = stop de la session (mesurée : +865R sur 80 mois)_\n"
-    report += f"💰 _Sizing : {RISK_PCT_1H:g}% de {CAPITAL_1H:,.0f}$ = {RISK_USD_1H:,.0f}$ de risque par trade (taille dans chaque setup)_\n\n"
-
-    if setups_valides:
-        report += f"🚀 *SETUPS VALIDÉS (max {session['max']})*\n"
-        for s in setups_valides[:session['max']]:
-            dist_sl = abs(s['entry'] - s['sl'])
-            taille = RISK_USD_1H / dist_sl if dist_sl > 0 else 0.0
-            report += f"• *{s['symbol']}* ({s['dir']})\n"
-            report += f"  Entrée : {fmt_price(s['entry'])} | SL : {fmt_price(s['sl'])}\n"
-            report += f"  TP1 : {fmt_price(s['tp1'])} | TP2 : {fmt_price(s['tp2'])}\n"
-            report += f"  💰 {RISK_USD_1H:,.0f}$ de risque -> ~{fmt_qty(taille)} coins (position ~{taille*s['entry']:,.0f}$)\n\n"
-    else:
-        report += "🚀 *SETUPS VALIDÉS* : Aucun.\n\n"
-
-    if preparations:
-        report += "⏳ *EN PRÉPARATION*\n"
-        for p in preparations[:5]:
-            report += f"• *{p['symbol']}* ({p['dir']}) - Niveau : {fmt_price(p['level'])}\n"
-        report += "\n"
-
-    if surveillances:
-        report += "👀 *SOUS SURVEILLANCE*\n"
-        for s in surveillances[:5]:
-            report += f"• *{s['symbol']}* ({s['dir']}) - Ligne : {fmt_price(s['level'])}\n"
-
-    # >>> nouveau : transparence sur les blocages
-    if bloques:
-        report += "\n🚫 *BLOQUÉS (ne pas trader)*\n"
-        for b in bloques:
-            report += f"• *{b['symbol']}* ({b['dir']}) - {b['why']}\n"
-
-    if h24_alerts:
-        report += "\n⏰ *TIME STOP H24 — FERMER AU MARCHÉ si encore en position*\n"
-        for sym, st, age_h in h24_alerts:
-            report += f"• *{sym}* ({st['dir']}) — ouvert {age_h:.0f}h, ni TP2 ni SL touchés\n"
-
-    send_telegram_message(report)
-    print("Rapport envoyé.")
-    _save_state(state)
-
-
-if __name__ == "__main__":
-    run_bot()
+                    try:
+                        entry, sl, tp1, tp2 = calculate_levels(df, signal, pivot_data, rr_eff, symbol)
+                    except (TypeError, ValueError, KeyError, OverflowError, IndexError) as exc:
+                        print(f"[SECURITE] {symbol}: calcul impossible : {exc}")
+                        rejected.append(symbol)
+                        continue
+                    if not _valid_prices(signal['dir'], entry, sl, tp1, tp2):
+                        print(f"[SECURITE] {symbol}: niveaux invalides ou stop supérieur à 20% ; setup rejeté.")
+                        rejected.append(symbol)
+                        continue
+                    setups_valides.append({'symbol
