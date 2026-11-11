@@ -463,4 +463,73 @@ def run_bot():
                         print(f"[SECURITE] {symbol}: niveaux invalides ou stop supérieur à 20% ; setup rejeté.")
                         rejected.append(symbol)
                         continue
-                    setups_valides.append({'symbol
+                    
+                    setups_valides.append({'symbol': symbol, 'dir': signal['dir'],
+                                           'entry': entry, 'sl': sl, 'tp1': tp1, 'tp2': tp2})
+                    # Suivi H24 : pas de reset si déjà suivi
+                    if TIME_STOP_HOURS > 0 and symbol not in state:
+                        state[symbol] = {'dir': signal['dir'], 'entry': entry, 'sl': sl,
+                                         'tp2': tp2, 'ts_open': int(time.time() * 1000)}
+                else:
+                    is_btc = symbol == 'BTC/USDT'
+                    price_level = signal['level'] if is_btc else signal['level'] * df['close_btc'].iloc[-1]
+                    preparations.append({'symbol': symbol, 'dir': signal['dir'], 'level': price_level})
+            elif signal['status'] == 'SURVEILLANCE':
+                is_btc = symbol == 'BTC/USDT'
+                price_level = signal['level'] if is_btc else signal['level'] * df['close_btc'].iloc[-1]
+                surveillances.append({'symbol': symbol, 'dir': signal['dir'], 'level': price_level})
+        time.sleep(0.5)
+
+    report = f"⚡ *RAPPORT INTRADAY (1H) - {session['emoji']} {session['name']}*\n"
+    report += f"🕐 {datetime.now().strftime('%H:%M')} | 🔍 _{len(dynamic_alts)} altcoins_\n"
+    report += "🎯 _Gérer à TP2 (pas de partiel à TP1) ou SL→entrée après TP1_\n"
+    report += "🛑 _2 pertes consécutives = stop de la session (mesurée : +865R sur 80 mois)_\n"
+    report += f"💰 _Sizing : {RISK_PCT_1H:g}% de {CAPITAL_1H:,.0f}$ = {RISK_USD_1H:,.0f}$ de risque par trade (taille dans chaque setup)_\n\n"
+
+    if setups_valides:
+        report += f"🚀 *SETUPS VALIDÉS (max {session['max']})*\n"
+        for s in setups_valides[:session['max']]:
+            dist_sl = abs(s['entry'] - s['sl'])
+            taille = RISK_USD_1H / dist_sl if dist_sl > 0 else 0.0
+            report += f"• *{s['symbol']}* ({s['dir']})\n"
+            report += f"  Entrée : {fmt_price(s['entry'])} | SL : {fmt_price(s['sl'])}\n"
+            report += f"  TP1 : {fmt_price(s['tp1'])} | TP2 : {fmt_price(s['tp2'])}\n"
+            report += f"  💰 {RISK_USD_1H:,.0f}$ de risque -> ~{fmt_qty(taille)} coins (position ~{taille*s['entry']:,.0f}$)\n\n"
+    else:
+        report += "🚀 *SETUPS VALIDÉS* : Aucun.\n\n"
+
+    if preparations:
+        report += "⏳ *EN PRÉPARATION*\n"
+        for p in preparations[:5]:
+            report += f"• *{p['symbol']}* ({p['dir']}) - Niveau : {fmt_price(p['level'])}\n"
+        report += "\n"
+
+    if surveillances:
+        report += "👀 *SOUS SURVEILLANCE*\n"
+        for s in surveillances[:5]:
+            report += f"• *{s['symbol']}* ({s['dir']}) - Ligne : {fmt_price(s['level'])}\n"
+
+    if bloques:
+        report += "\n🚫 *BLOQUÉS (ne pas trader)*\n"
+        for b in bloques:
+            report += f"• *{b['symbol']}* ({b['dir']}) - {b['why']}\n"
+
+    if invalid_states:
+        report += "\n⚠️ *SUIVI INVALIDE — NE PAS TRADER* : " + ", ".join(invalid_states) + "\n"
+        report += "État conservé mais suspendu : vérifier manuellement avant nettoyage.\n"
+
+    if rejected:
+        report += "\n⚠️ Setups rejetés : niveaux incohérents ou stop supérieur à 20% : " + ", ".join(rejected) + "\n"
+
+    if h24_alerts:
+        report += "\n⏰ *TIME STOP H24 — FERMER AU MARCHÉ si encore en position*\n"
+        for sym, st, age_h in h24_alerts:
+            report += f"• *{sym}* ({st['dir']}) — ouvert {age_h:.0f}h, ni TP2 ni SL touchés\n"
+
+    send_telegram_message(report)
+    print("Rapport envoyé.")
+    _save_state(state)
+
+
+if __name__ == "__main__":
+    run_bot()
