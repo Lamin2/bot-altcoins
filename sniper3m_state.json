@@ -10,7 +10,7 @@
  },
  "ETH/USDT": {
   "pos": null,
-  "last_entry_ts": 1794563100000,
+  "last_entry_ts": 1794582720000,
   "rule": {
    "key": "20764_NEW YORK",
    "consec": 1,
@@ -28,10 +28,10 @@
    "session": "NEW YORK",
    "day": 20770,
    "rr": 5.0,
-   "checked_ts": 1794581640000,
+   "checked_ts": 1794600360000,
    "tp1_hit": false
   },
-  "last_entry_ts": 1794581640000,
+  "last_entry_ts": 1794583800000,
   "rule": {
    "key": null,
    "consec": 0,
