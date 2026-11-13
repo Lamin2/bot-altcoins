@@ -1,7 +1,7 @@
 {
  "BTC/USDT": {
   "pos": null,
-  "last_entry_ts": 1794410100000,
+  "last_entry_ts": 1794579840000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -10,7 +10,7 @@
  },
  "ETH/USDT": {
   "pos": null,
-  "last_entry_ts": 1794406680000,
+  "last_entry_ts": 1794563100000,
   "rule": {
    "key": "20764_NEW YORK",
    "consec": 1,
@@ -18,8 +18,20 @@
   }
  },
  "BNB/USDT": {
-  "pos": null,
-  "last_entry_ts": 1794408480000,
+  "pos": {
+   "ts": 1794581640000,
+   "dir": "SHORT",
+   "entry": 638.31,
+   "sl": 642.453859,
+   "tp1": 617.590704,
+   "tp2": 596.871409,
+   "session": "NEW YORK",
+   "day": 20770,
+   "rr": 5.0,
+   "checked_ts": 1794581640000,
+   "tp1_hit": false
+  },
+  "last_entry_ts": 1794581640000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -28,12 +40,12 @@
  },
  "SOL/USDT": {
   "pos": null,
-  "last_entry_ts": 1794387060000,
+  "last_entry_ts": 1794561480000,
   "rule": {
    "key": null,
    "consec": 0,
    "stopped": false
   }
  },
- "last_hb": "2026-11-12"
+ "last_hb": "2026-11-13"
 }
