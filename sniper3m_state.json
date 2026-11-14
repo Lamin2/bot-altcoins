@@ -18,29 +18,17 @@
   }
  },
  "BNB/USDT": {
-  "pos": {
-   "ts": 1794581640000,
-   "dir": "SHORT",
-   "entry": 638.31,
-   "sl": 642.453859,
-   "tp1": 617.590704,
-   "tp2": 596.871409,
-   "session": "NEW YORK",
-   "day": 20770,
-   "rr": 5.0,
-   "checked_ts": 1794664260000,
-   "tp1_hit": true
-  },
+  "pos": null,
   "last_entry_ts": 1794644280000,
   "rule": {
-   "key": null,
+   "key": "20770_NEW YORK",
    "consec": 0,
    "stopped": false
   }
  },
  "SOL/USDT": {
   "pos": null,
-  "last_entry_ts": 1794646080000,
+  "last_entry_ts": 1794664800000,
   "rule": {
    "key": null,
    "consec": 0,
