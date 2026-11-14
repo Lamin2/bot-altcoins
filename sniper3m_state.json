@@ -1,7 +1,7 @@
 {
  "BTC/USDT": {
   "pos": null,
-  "last_entry_ts": 1794579840000,
+  "last_entry_ts": 1794645000000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -28,10 +28,10 @@
    "session": "NEW YORK",
    "day": 20770,
    "rr": 5.0,
-   "checked_ts": 1794600360000,
-   "tp1_hit": false
+   "checked_ts": 1794664260000,
+   "tp1_hit": true
   },
-  "last_entry_ts": 1794583800000,
+  "last_entry_ts": 1794644280000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -40,12 +40,12 @@
  },
  "SOL/USDT": {
   "pos": null,
-  "last_entry_ts": 1794561480000,
+  "last_entry_ts": 1794646080000,
   "rule": {
    "key": null,
    "consec": 0,
    "stopped": false
   }
  },
- "last_hb": "2026-11-13"
+ "last_hb": "2026-11-14"
 }
