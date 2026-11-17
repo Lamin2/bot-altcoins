@@ -10,7 +10,7 @@
  },
  "ETH/USDT": {
   "pos": null,
-  "last_entry_ts": 1794582720000,
+  "last_entry_ts": 1794925800000,
   "rule": {
    "key": "20764_NEW YORK",
    "consec": 1,
@@ -35,5 +35,5 @@
    "stopped": false
   }
  },
- "last_hb": "2026-11-16"
+ "last_hb": "2026-11-17"
 }
