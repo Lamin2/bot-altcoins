@@ -1,7 +1,7 @@
 {
  "BTC/USDT": {
   "pos": null,
-  "last_entry_ts": 1795102920000,
+  "last_entry_ts": 1795530600000,
   "rule": {
    "key": null,
    "consec": 0,
@@ -10,7 +10,7 @@
  },
  "ETH/USDT": {
   "pos": null,
-  "last_entry_ts": 1795330800000,
+  "last_entry_ts": 1795530600000,
   "rule": {
    "key": "20764_NEW YORK",
    "consec": 1,
@@ -28,7 +28,7 @@
  },
  "SOL/USDT": {
   "pos": null,
-  "last_entry_ts": 1795164660000,
+  "last_entry_ts": 1795505940000,
   "rule": {
    "key": null,
    "consec": 0,
